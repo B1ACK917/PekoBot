@@ -70,3 +70,10 @@
 ## 注
 
 由于是对接Bigfun来获得数据，所以更新速度取决于Bigfun的数据更新间隔，Bigfun数据更新后将在10s内同步到机器人。
+
+## Special Thanks
+
+[Graia]: https://github.com/GraiaProject
+[Mirai]: https://github.com/project-mirai
+[MiraiOK]: https://github.com/LXY1226/MiraiOK
+
