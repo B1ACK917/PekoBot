@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.INFO)
 
 loop = asyncio.get_event_loop()
 
-with open('./config.json') as config_file:
+with open('./config.json',encoding='utf-8') as config_file:
     config = json.load(config_file)
 
 bcc = Broadcast(loop=loop)

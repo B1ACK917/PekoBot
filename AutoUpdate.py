@@ -22,12 +22,15 @@ class PCRBot:
         self.resourceDir = r'./Resource/'
         self.tempDir = r'./Temp/'
         self.dataDir = r'./Data/'
-        with open('./config.json') as config_file:
+        with open('./config.json',encoding='utf-8') as config_file:
             self.bossName = json.load(config_file)['Bot']
         self.bossNum = {}
         for key, value in self.bossName.items():
             self.bossNum.update({value: key})
         self.needAT = None
+        for path in [self.resourceDir, self.tempDir, self.dataDir]:
+            if not os.path.exists(path):
+                os.mkdir(path)
         if os.path.exists(self.dataDir + 'selfMap.npy'):
             self.map = np.load(self.dataDir + 'selfMap.npy', allow_pickle=True).item()
             print('Load IDMap Success.')
@@ -264,9 +267,7 @@ class PCRBot:
             pass
 
     def test(self):
-        # print(self.__get_today_remain_pt())
-        print(self.__get_player('total', '酋长kz'))
-        # pass
+        pass
 
     def need_at(self):
         if self.needAT:
@@ -305,4 +306,3 @@ if __name__ == '__main__':
     a = PCRBot()
     a.initialize()
     a.test()
-    # a.run('查刀 宇')
