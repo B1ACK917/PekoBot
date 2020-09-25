@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.INFO)
 
 loop = asyncio.get_event_loop()
 
-with open('./config.json',encoding='utf-8') as config_file:
+with open('./config.json', encoding='utf-8') as config_file:
     config = json.load(config_file)
 
 bcc = Broadcast(loop=loop)
@@ -38,15 +38,16 @@ Global_group = config['Graia']['group']
 
 @bcc.receiver("GroupMessage")
 async def group_message_handler(app: GraiaMiraiApplication, message: MessageChain, group: Group, member: Member):
-    for i in ['状态', '查', '绑定', '预约', '总查刀']:
-        if message.asDisplay().startswith(i):
-            result, type = Bot.run(message.asDisplay() + ' ' + str(member.name) + ' ' + str(member.id))
-            if type == 'STR':
-                await app.sendGroupMessage(group,
-                                           MessageChain.create([At(target=member.id), Plain('\n' + result)]))
-            elif type == 'IMG':
-                await app.sendGroupMessage(group,
-                                           MessageChain.create([At(target=member.id), Image.fromLocalFile(result)]))
+    if group.id == Global_group:
+        for i in ['状态', '查', '绑定', '预约', '总查刀']:
+            if message.asDisplay().startswith(i):
+                result, type = Bot.run(message.asDisplay() + ' ' + str(member.name) + ' ' + str(member.id))
+                if type == 'STR':
+                    await app.sendGroupMessage(group,
+                                               MessageChain.create([At(target=member.id), Plain('\n' + result)]))
+                elif type == 'IMG':
+                    await app.sendGroupMessage(group,
+                                               MessageChain.create([At(target=member.id), Image.fromLocalFile(result)]))
 
 
 async def reminder():
