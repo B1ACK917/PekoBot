@@ -22,8 +22,10 @@ class PCRBot:
         self.resourceDir = r'./Resource/'
         self.tempDir = r'./Temp/'
         self.dataDir = r'./Data/'
-        with open('./config.json',encoding='utf-8') as config_file:
-            self.bossName = json.load(config_file)['Bot']
+        with open('./config.json', encoding='utf-8') as config_file:
+            config = json.load(config_file)
+            self.bossName = config['Bot']['bossName']
+            self.cookies = config['Bot']['cookies']
         self.bossNum = {}
         for key, value in self.bossName.items():
             self.bossNum.update({value: key})

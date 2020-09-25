@@ -1,0 +1,7 @@
+datetime
+requests
+json
+opencv-python
+numpy
+PIL
+graia-application-mirai
