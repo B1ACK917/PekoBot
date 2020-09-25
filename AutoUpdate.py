@@ -19,19 +19,23 @@ class PCRBot:
         self.statusData = None
         self.lastBossName = ''
         self.playerData = {}
-        self.bossName = {'1': '双足飞龙', '2': '野性狮鹫', '3': '支配者', '4': '独眼巨人', '5': '美杜莎', '5.5': '狂暴美杜莎'}
+        self.resourceDir = r'./Resource/'
+        self.tempDir = r'./Temp/'
+        self.dataDir = r'./Data/'
+        with open('./config.json') as config_file:
+            self.bossName = json.load(config_file)['Bot']
         self.bossNum = {}
         for key, value in self.bossName.items():
             self.bossNum.update({value: key})
         self.needAT = None
-        if os.path.exists(r'./Resource/selfMap.npy'):
-            self.map = np.load(r'./Resource/selfMap.npy', allow_pickle=True).item()
+        if os.path.exists(self.dataDir + 'selfMap.npy'):
+            self.map = np.load(self.dataDir + 'selfMap.npy', allow_pickle=True).item()
             print('Load IDMap Success.')
             print(self.map)
         else:
             self.map = {}
-        if os.path.exists(r'./Resource/Subscription.npy'):
-            self.subscribeData = np.load(r'./Resource/Subscription.npy', allow_pickle=True).item()
+        if os.path.exists(self.dataDir + 'Subscription.npy'):
+            self.subscribeData = np.load(self.dataDir + 'Subscription.npy', allow_pickle=True).item()
             print('Load Subscription Data success.')
             print(self.subscribeData)
         else:
@@ -95,14 +99,14 @@ class PCRBot:
         for i in range(white_pic.shape[0]):
             for j in range(white_pic.shape[1]):
                 white_pic[i, j] = (255, 255, 255)
-        cv2.imwrite('1.jpg', white_pic)
-        pic = Image.open('1.jpg')
+        cv2.imwrite(self.tempDir + '1.jpg', white_pic)
+        pic = Image.open(self.tempDir + '1.jpg')
         draw = ImageDraw.Draw(pic)
-        fnt = ImageFont.truetype(r'./Resource/msyh.ttc', 20)
+        fnt = ImageFont.truetype(self.resourceDir + 'msyh.ttc', 20)
         for i in range(len(t_list)):
             draw.text((10, (i + 1) * 20), t_list[i], fill='black', font=fnt)
-        pic.save('./Temp/temp.jpg')
-        return r'./Temp/temp.jpg'
+        pic.save(self.tempDir + 'temp.jpg')
+        return self.tempDir + 'temp.jpg'
 
     def __ori_player_information2str(self, information, type):
         sample = '对第{}周目{}造成{}伤害{}{}\n'
@@ -171,13 +175,13 @@ class PCRBot:
             self.map.update({member: game_id})
         else:
             self.map[member] = game_id
-        np.save('./Resource/selfMap.npy', self.map, allow_pickle=True)
+        np.save(self.dataDir + 'selfMap.npy', self.map, allow_pickle=True)
         return '绑定成功, {} 目前的游戏名称记为 {}'.format(member, game_id)
 
     def __subscribe(self, player, boss, player_name):
         if boss in self.bossName:
             self.subscribeData[self.bossName[boss]].append((player, player_name))
-            np.save('./Resource/Subscription.npy', self.subscribeData, allow_pickle=True)
+            np.save(self.dataDir + 'Subscription.npy', self.subscribeData, allow_pickle=True)
             return '预约成功'
         else:
             return '查无此boss'
@@ -185,12 +189,13 @@ class PCRBot:
     def __monitor_boss(self):
         boss = self.__get_latest_boss_name()
         percent = self.__get_latest_boss_current_life() / self.__get_latest_boss_total_life()
-        if percent <= 0.5:
+        if percent <= 0.5 and boss == self.bossName['5']:
             boss = '狂暴' + boss
         data = self.subscribeData[boss]
         if data:
-            self.needAT = data
+            self.needAT = (boss, data)
             self.subscribeData[boss] = []
+            np.save(self.dataDir + 'Subscription.npy', self.subscribeData, allow_pickle=True)
 
     def __get_subscription(self, boss):
         boss_name = self.bossName[boss]
@@ -265,9 +270,9 @@ class PCRBot:
 
     def need_at(self):
         if self.needAT:
-            at_list = self.needAT.copy()
-            self.needAT.clear()
-            return at_list, '{}到了,该出刀了\n'.format(self.__get_latest_boss_name())
+            boss, at_list = self.needAT
+            self.needAT = None
+            return at_list, '{}到了,该出刀了\n'.format(boss)
         return None
 
     def run(self, command):
