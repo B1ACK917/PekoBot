@@ -7,12 +7,17 @@ import threading
 import cv2
 import numpy as np
 from PIL import ImageFont, ImageDraw, Image
+import regex
 
 
 class PCRBot:
     def __init__(self):
         self.dataServer = 'https://www.bigfun.cn/api/feweb?target=gzlj-clan-day-report%2Fa&date={}&page=1&size=30'
         self.statusServer = 'https://www.bigfun.cn/api/feweb?target=gzlj-clan-day-report-collect%2Fa'
+        self.worksCatalogServer = 'https://www.bigfun.cn/api/feweb?target=get-gzlj-team-war-work-list%2Fa&type=2&battle_id={}&boss_position={}&order=1&page={}'
+        self.workServer = 'https://www.bigfun.cn/api/feweb?target=get-gzlj-team-war-work-detail%2Fa&work_id={}'
+        self.bossServer = 'https://www.bigfun.cn/api/feweb?target=gzlj-clan-boss-report-collect%2Fa'
+        self.roleIDServer = 'https://www.bigfun.cn/api/feweb?target=get-gzlj-role-list%2Fa'
         self.header = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.80 Safari/537.36',
         }
@@ -22,10 +27,12 @@ class PCRBot:
         self.resourceDir = r'./Resource/'
         self.tempDir = r'./Temp/'
         self.dataDir = r'./Data/'
+        self.bossName = {}
+        self.__get_boss_name()
         with open('./config.json', encoding='utf-8') as config_file:
             config = json.load(config_file)
-            self.bossName = config['Bot']['bossName']
             self.cookies = config['Bot']['cookies']
+            self.battle_id = config['Bot']['battle_id']
         self.bossNum = {}
         for key, value in self.bossName.items():
             self.bossNum.update({value: key})
@@ -48,6 +55,13 @@ class PCRBot:
             for name in self.bossName.values():
                 self.subscribeData.update({name: []})
         self.rank = {}
+        self.works = {}
+        self.role_id = {}
+        self.__get_role_id()
+        self.cycleMap = {'A': 1, 'a': 1, 'B': 2, 'b': 2, 'C': 3, 'c': 3}
+        self.work_id_monitor = {}
+        for i in range(1, 4):
+            self.works.update({i: {'1': [], '2': [], '3': [], '4': [], '5': []}})
 
     def __get_team_name(self):
         return self.statusData['clan_info']['name']
@@ -185,11 +199,11 @@ class PCRBot:
 
     def __subscribe(self, player, boss, player_name):
         if boss in self.bossName:
+            if (player, player_name) in self.subscribeData[self.bossName[boss]]:
+                return '您已经预约过{}号boss了'.format(boss)
             self.subscribeData[self.bossName[boss]].append((player, player_name))
             np.save(self.dataDir + 'Subscription.npy', self.subscribeData, allow_pickle=True)
             return '预约成功'
-        else:
-            return '查无此boss'
 
     def __monitor_boss(self):
         boss = self.__get_latest_boss_name()
@@ -229,8 +243,50 @@ class PCRBot:
             message += '\n今日还有{}人未完成出刀,共剩{}刀'.format(cnt, remain)
         return message
 
+    def __get_work(self, member_id, work_id):
+        cycle, boss_id = self.work_id_monitor[member_id]
+        self.work_id_monitor[member_id] = None
+        message = '角色需求:\n{}\n时间轴:\n{}\n\n备注:\n{}'
+        role_pattern = '{}星{}{}\n'
+        role_list = ''
+        this_work = self.works[cycle][boss_id][work_id - 1]
+        for role in this_work['role_list']:
+            role_list += role_pattern.format(role['stars'], '专武' if role['weapons'] else '', self.role_id[role['id']])
+        message = message.format(role_list, this_work['work'], this_work['remark'])
+        return self.make_pic(message)
+
+    def __get_works(self, cycle, boss_id, member_id):
+        message = ''
+        pattern = '{}: {}    预期伤害: {}\n'
+        cnt = 1
+        for work in self.works[cycle][boss_id]:
+            message += pattern.format(cnt, work['Title'], work['expect_injury'])
+            cnt += 1
+        if member_id not in self.work_id_monitor:
+            self.work_id_monitor.update({member_id: (cycle, boss_id)})
+        else:
+            self.work_id_monitor[member_id] = (cycle, boss_id)
+        return self.make_pic(message)
+
     def __get_today_remain_pt(self):
         return self.__get_remain_pt('today')
+
+    def __get_boss_name(self):
+        pre_boss_html = requests.get(url=self.bossServer,
+                                     cookies={'session-api': 'trpphlgrc39d3lf1qni787hcgo'})
+        boss_html = pre_boss_html.text.encode(pre_boss_html.encoding).decode('utf-8')
+        boss_list = json.loads(boss_html)['data']['boss_list']
+        for i in range(len(boss_list)):
+            self.bossName.update({str(i + 1): boss_list[i]['boss_name']})
+        self.bossName.update({'5.5': '狂暴{}'.format(self.bossName['5'])})
+
+    def __get_role_id(self):
+        role_id_html = requests.get(url=self.roleIDServer,
+                                    cookies={'session-api': 'trpphlgrc39d3lf1qni787hcgo'})
+        role_id_html = role_id_html.text.encode(role_id_html.encoding).decode('utf-8')
+        role_ids = json.loads(role_id_html)['data']
+        for r_i in role_ids:
+            self.role_id.update({r_i['id']: r_i['name']})
 
     def __update_latest_status(self):
         while True:
@@ -260,22 +316,54 @@ class PCRBot:
                 pass
             time.sleep(10)
 
+    def __update_works(self):
+        while True:
+            try:
+                for boss_id in range(1, 6):
+                    pre_pagination_html = requests.get(url=self.worksCatalogServer.format(self.battle_id, boss_id, 1),
+                                                       cookies={'session-api': 'trpphlgrc39d3lf1qni787hcgo'})
+                    pagination_html = pre_pagination_html.text.encode(pre_pagination_html.encoding).decode('utf-8')
+                    total_page = json.loads(pagination_html)['pagination']['total_page']
+                    for page in range(1, total_page + 1):
+                        pre_works_catalog = requests.get(
+                            url=self.worksCatalogServer.format(self.battle_id, boss_id, page),
+                            cookies={'session-api': 'trpphlgrc39d3lf1qni787hcgo'})
+                        catalog = pre_works_catalog.text.encode(pre_works_catalog.encoding).decode('utf-8')
+                        pre_works = json.loads(catalog)['data']
+                        for pre_work in pre_works:
+                            work_html = requests.get(url=self.workServer.format(pre_work['id']),
+                                                     cookies={'session-api': 'trpphlgrc39d3lf1qni787hcgo'})
+                            work_html = work_html.text.encode(work_html.encoding).decode('utf-8')
+                            _work = json.loads(work_html)['data']
+                            new_work = {}
+                            new_work.update({'Title': _work['title']})
+                            new_work.update({'role_list': eval(_work['role_list'])})
+                            new_work.update({'expect_injury': _work['expect_injury']})
+                            new_work.update({'remark': _work['remark']})
+                            new_work.update({'work': _work['work']})
+                            if new_work not in self.works[_work['boss_cycle']][str(boss_id)]:
+                                self.works[_work['boss_cycle']][str(boss_id)].append(new_work)
+            except Exception:
+                print(Exception)
+            time.sleep(120)
+
     def initialize(self):
         threading.Thread(target=self.__update_latest_status).start()
         threading.Thread(target=self.__update_player_info).start()
+        threading.Thread(target=self.__update_works).start()
         while self.statusData is None:
             pass
         while len(self.playerData) != len(self.__get_day_list()):
             pass
 
     def test(self):
-        pass
+        self.__update_works()
 
     def need_at(self):
         if self.needAT:
             boss, at_list = self.needAT
             self.needAT = None
-            return at_list, '{}到了,该出刀了\n'.format(boss)
+            return at_list, '{}号boss到了,该出刀了\n'.format(self.bossNum[boss])
         return None
 
     def run(self, command):
@@ -288,6 +376,12 @@ class PCRBot:
             if command[1] in self.map:
                 return self.__get_player('total', self.map[command[1]]), 'IMG'
             return self.__get_player('total', command[1]), 'IMG'
+        elif command[0] == '查作业':
+            cycle = self.cycleMap[command[1][0]]
+            boss = command[1][1]
+            return self.__get_works(cycle, boss, command[-1]), 'IMG'
+        elif command[0] == '获取':
+            return self.__get_work(command[-1], int(command[1])), 'IMG'
         elif command[0] == '状态':
             return self.__get_status(), 'STR'
         elif command[0] == '绑定':
@@ -298,9 +392,9 @@ class PCRBot:
                 return self.make_pic(message), 'IMG'
             else:
                 return message, 'STR'
-        elif command[0][:2] == '预约':
+        elif command[0][:2] == '预约' and len(command) == 3:
             return self.__subscribe(command[2], command[0][2:], command[1]), 'STR'
-        elif command[0][0] == '查':
+        elif command[0][0] == '查' and len(command) == 3:
             return self.__get_subscription(command[0][1:]), 'STR'
 
 

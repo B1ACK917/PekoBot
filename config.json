@@ -6,14 +6,7 @@
 "port": 8080
 }, 
 "Bot": {
-"bossName": {
-"1": "双足飞龙", 
-"2": "野性狮鹫", 
-"3": "支配者", 
-"4": "独眼巨人", 
-"5": "美杜莎", 
-"5.5": "狂暴美杜莎"
-}, 
-"cookies": "your cookies"
+"cookies": "Your-Cookies", 
+"battle_id": 4
 }
 }
